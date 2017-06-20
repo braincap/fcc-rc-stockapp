@@ -49,7 +49,7 @@ io.on('connection', socket => {
           cursor_id = `&qopts.cursor_id=${data.meta.next_cursor_id}`;
           pullAllData(stockData, cursor_id, stockList);
         } else {
-          socket.emit('stockAll', stockData);
+          io.emit('stockAll', stockData);
         }
       });
     }

@@ -7,14 +7,15 @@ document.querySelector('#submit').addEventListener('click', function () {
 });
 
 var data = {};
+var transitionDuration = 1000;
 const todayDate = moment().format('YYYY-MM-DD');
 const lastYearDate = moment(todayDate).subtract(1, 'year').add(1, 'day').format('YYYY-MM-DD');
 const lastQuarterDate = moment(todayDate).subtract(3, 'month').add(1, 'day').format('YYYY-MM-DD');
 const lastMonthDate = moment(todayDate).subtract(1, 'month').add(1, 'day').format('YYYY-MM-DD');
 
-var margin = { top: 100, right: 100, bottom: 100, left: 100 };
+var margin = { top: 50, right: 100, bottom: 50, left: 100 };
 
-var width = 600 - margin.left - margin.right;
+var width = 800 - margin.left - margin.right;
 var height = 600 - margin.top - margin.bottom;
 
 // Set the ranges
@@ -22,7 +23,7 @@ var x = d3.scaleTime().range([0, width]);
 var y = d3.scaleLinear().range([height, 0]);
 var colors = d3.scaleOrdinal(d3.schemeCategory10);
 
-// Define the axes
+// Data formatting
 var parseDate = d3.timeParse('%Y-%m-%d');
 
 // Define the line
@@ -40,9 +41,6 @@ var chart = d3.select('.chart')
 socket.on('stockNew', newStockData => {
   if (newStockData === 'exists' || newStockData === 'invalid') {
     console.log('exists / invalid : ', newStockData);
-  } else {
-    data = temp;
-    drawChart(data);
   }
 });
 
@@ -59,21 +57,28 @@ socket.on('stockAll', allStockData => {
 
 const drawChart = (data) => {
 
+  var tempData = data.filter(d => parseDate(d[1]) > parseDate(lastYearDate));
+  data = tempData;
+
   data.forEach(d => {
     d.ticker = d[0];
     d.closeDate = parseDate(d[1]);
     d.closeVal = +d[2];
   });
 
+
   // Scale the range of the data
   // x.domain(d3.extent(data, d => d.closeDate));
   x.domain([parseDate(lastYearDate), parseDate(todayDate)]);
   y.domain([0, d3.max(data, d => d.closeVal)]);
 
+  // Filter data for year by default
+
   // Nest the entries by symbol
   const nestedData = d3.nest()
     .key(d => d.ticker)
     .entries(data);
+
 
   // https://www.youtube.com/watch?v=OZXYk_bgQGQ
 
@@ -91,19 +96,74 @@ const drawChart = (data) => {
     .data(nestedData, d => d.key);
 
   // Delete removed tickers
-  path.exit().remove();
+  path
+    .exit()
+    .transition()
+    .duration(transitionDuration)
+    .remove();
 
   // Update value of path of existing data since scale will change when adding new tickers
-  path.attr('d', d => priceLine(d.values));
+  path
+    .transition()
+    .duration(transitionDuration)
+    .ease(d3.easeQuadOut)
+    .attr('d', d => priceLine(d.values));
 
   // Append path for newly added ticker
   path.enter()
     .append('path')
+    .attr('fill', 'none')
     .attr('stroke', d => colors(d.key))
     .attr('class', d => `line ${d.key}`)
-    .attr('d', d => priceLine(d.values));
+    .attr('d', d => priceLine(d.values))
+    .attr('stroke-dasharray', function (d) { return this.getTotalLength() })
+    .attr('stroke-dashoffset', function (d) { return this.getTotalLength() })
+    .transition().duration(transitionDuration).ease(d3.easeQuadOut).attr('stroke-dashoffset', 0);
 
-  console.log(nestedData)
+  var xAxis = d3.axisBottom(x);
+
+  var yAxis = d3.axisRight(y)
+    .tickSize(width);
+
+  if (!d3.selectAll('.axis').size()) {
+
+    var xGroup = chart.append('g')
+      .attr('class', 'x axis')
+      .attr('transform', `translate(0,${height})`)
+      .call(customXAxis);
+
+    var yGroup = chart.append('g')
+      .attr('class', 'y axis')
+      .call(customYAxis);
+
+  } else {
+
+    d3.selectAll('.y.axis')
+      .transition()
+      .duration(transitionDuration)
+      .call(customYAxis);
+
+  }
+
+
+  function customXAxis(g) {
+    g.call(xAxis);
+    g.select('.domain').remove();
+  }
+
+  // NEEDS CLARIFICATION?
+  function customYAxis(g) {
+    console.log(g.selection);
+    var s = g.selection ? g.selection() : g;
+    g.call(yAxis);
+    s.select('.domain').remove();
+    s.selectAll('.tick:not(:first-of-type) line').attr('stroke', 'whitesmoke').attr('stroke-dasharray', '2,2');
+    s.selectAll('.tick text').attr('x', 4).attr('dy', -4).attr('fill', 'whitesmoke');
+    if (s !== g) {
+      g.selectAll('.tick text').attrTween('x', null).attrTween('dy', null);
+    }
+  }
+
 }
 
 

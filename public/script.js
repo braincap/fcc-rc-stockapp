@@ -11,7 +11,7 @@ $('form').submit(function (e) {
 var data = {};
 var margin = { top: 50, right: 100, bottom: 50, left: 100 };
 
-var transitionDuration = 1000;
+var transitionDuration = 500;
 const todayDate = moment().format('YYYY-MM-DD');
 const lastYearDate = moment(todayDate).subtract(1, 'year').add(1, 'day').format('YYYY-MM-DD');
 const lastQuarterDate = moment(todayDate).subtract(3, 'month').add(1, 'day').format('YYYY-MM-DD');
@@ -39,7 +39,7 @@ socket.on('stockNew', newStockData => {
   if (newStockData === 'exists' || newStockData === 'invalid') {
     console.log('exists / invalid : ', newStockData);
     $('.input-field').val('');
-    $('.input-field').attr('placeholder', (newStockData === 'exists') ? 'Enter new symbol' : 'Enter valid symbol');
+    $('.input-field').attr('placeholder', (newStockData === 'exists') ? 'Exists already' : 'Invalid Symbol');
   }
 });
 
@@ -50,14 +50,21 @@ socket.on('disconnect', () => {
 
 socket.on('stockAll', allStockData => {
   console.log('stockAll');
+  $('.input-field').attr('placeholder', 'Enter Symbol');
+  $('.input-field').val('');
   data = allStockData;
+  if (!data.length) {
+    $('#welcome-text').fadeIn(transitionDuration);
+  } else {
+    $('#welcome-text').fadeOut(transitionDuration);
+  }
   drawChart(data);
 });
 
 const drawChart = (data) => {
 
   // Default to only 1 year data
-  var tempData = data.filter(d => parseDate(d[1]) > parseDate(lastMonthDate));
+  var tempData = data.filter(d => parseDate(d[1]) > parseDate(lastQuarterDate));
   data = tempData;
 
   data.forEach(d => {
@@ -67,10 +74,8 @@ const drawChart = (data) => {
   });
 
   // Scale the range of the data
-  // x.domain(d3.extent(data, d => d.closeDate));
-  x.domain([parseDate(lastMonthDate), parseDate(todayDate)]);
+  x.domain([parseDate(lastQuarterDate), parseDate(todayDate)]);
   y.domain([0, d3.max(data, d => d.closeVal)]);
-  console.log(x.domain(), y.domain());
 
   // Define the line
   var priceLine = d3.line()
@@ -98,6 +103,17 @@ const drawChart = (data) => {
   var path = chart.selectAll('path')
     .data(nestedData, d => d.key);
 
+
+  // Update value of path of existing data since scale will change when adding new tickers
+  path
+    .attr('stroke-dasharray', 0)
+    .attr('stroke-dashoffset', 0)
+    .transition()
+    .duration(transitionDuration)
+    .ease(d3.easeQuadOut)
+    .attr('d', d => priceLine(d.values))
+
+
   // Append path for newly added ticker
   path.enter()
     .append('path')
@@ -105,21 +121,12 @@ const drawChart = (data) => {
     .attr('stroke', d => colors(d.key))
     .attr('class', d => `line ${d.key}`)
     .attr('d', d => priceLine(d.values))
-    .attr('stroke-dasharray', function (d) { return this.getTotalLength() })
+    .attr('stroke-dasharray', function (d) { return `${this.getTotalLength()} ${this.getTotalLength()}` })
     .attr('stroke-dashoffset', function (d) { return this.getTotalLength() })
     .transition().duration(transitionDuration).ease(d3.easeQuadOut).attr('stroke-dashoffset', 0);
 
   drawTiles(path.enter().data().map(d => d.key));
 
-  // Update value of path of existing data since scale will change when adding new tickers
-  path
-    // .transition()
-    // .duration(transitionDuration)
-    // .ease(d3.easeQuadOut)
-    .attr('d', d => {
-      console.log(d);
-      return priceLine(d.values)
-    });
 
   // Delete removed tickers
   path
@@ -131,7 +138,6 @@ const drawChart = (data) => {
     .remove();
 
   removeTiles(path.exit().data().map(d => d.key));
-
 
   var xAxis = d3.axisBottom(x);
 
@@ -182,8 +188,8 @@ function drawTiles(tickers) {
   tickers.forEach(ticker => {
     $(`<div class='ticker-card ${ticker}' data-tilt> <div>${ticker}</div></div > `)
       .appendTo('.ticker-div')
-      .css({ 'opacity': 0 })
-      .animate({ 'opacity': 1 }, 2000)
+      .css({ 'opacity': 0, 'background-color': colors(ticker) })
+      .animate({ 'opacity': 1 }, transitionDuration)
       .on('click', function () {
         socket.emit('stockDel', ticker);
       })
@@ -193,7 +199,7 @@ function drawTiles(tickers) {
 
 function removeTiles(tickers) {
   tickers.forEach(ticker => {
-    $(`.ticker-card.${ticker}`).remove();
+    $(`.ticker-card.${ticker}`).animate({ 'opacity': 0 }, transitionDuration, () => $(`.ticker-card.${ticker}`).remove());
   });
 }
 
@@ -206,3 +212,4 @@ $('body').on('mouseleave', '.ticker-card', function () {
   $(`.line.${$(this).attr('class').split(' ')[1]
     }`).css('stroke-width', 2);
 });
+

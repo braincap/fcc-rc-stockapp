@@ -39,6 +39,24 @@ io.on('connection', socket => {
       pullNewData([], '', msg)
     });
 
+    socket.on('stockDel', msg => {
+      console.log('Del', msg);
+      stockCollection.deleteOne({ ticker: msg }, (err, result) => {
+        if (err) { console.log(err); throw err; }
+        // Find all stocks in DB and get their prices from API
+        stockCollection.find({}).toArray((err, result) => {
+          if (!result.length) {
+            io.emit('stockAll', []);
+            return;
+          }
+          const stockList = result.reduce((acc, val, currIndex) => {
+            return acc + (currIndex === 0 ? '' : ',') + val.ticker
+          }, '');
+          pullAllData([], '', stockList);
+        });
+      });
+    });
+
     function pullAllData(stockData, cursor_id, stockList) {
       request.get(`${apiQuery}${stockList}${cursor_id}`, (err, response, data) => {
         if (err) { console.log(err); throw err; }

@@ -1,19 +1,21 @@
 'use strict';
 var socket = io.connect({ 'forceNew': true });
 
-document.querySelector('#submit').addEventListener('click', function () {
-  socket.emit('stock', document.querySelector('#input').value);
+$('form').submit(function (e) {
+  e.preventDefault();
+  socket.emit('stock', $('.input-field').val());
   return false;
 });
 
+
 var data = {};
+var margin = { top: 50, right: 100, bottom: 50, left: 100 };
+
 var transitionDuration = 1000;
 const todayDate = moment().format('YYYY-MM-DD');
 const lastYearDate = moment(todayDate).subtract(1, 'year').add(1, 'day').format('YYYY-MM-DD');
 const lastQuarterDate = moment(todayDate).subtract(3, 'month').add(1, 'day').format('YYYY-MM-DD');
 const lastMonthDate = moment(todayDate).subtract(1, 'month').add(1, 'day').format('YYYY-MM-DD');
-
-var margin = { top: 50, right: 100, bottom: 50, left: 100 };
 
 var width = 800 - margin.left - margin.right;
 var height = 600 - margin.top - margin.bottom;
@@ -26,11 +28,6 @@ var colors = d3.scaleOrdinal(d3.schemeCategory10);
 // Data formatting
 var parseDate = d3.timeParse('%Y-%m-%d');
 
-// Define the line
-var priceLine = d3.line()
-  .x(d => x(d.closeDate))
-  .y(d => y(d.closeVal));
-
 var chart = d3.select('.chart')
   .attr('width', width + margin.left + margin.right)
   .attr('height', height + margin.top + margin.bottom)
@@ -41,6 +38,8 @@ var chart = d3.select('.chart')
 socket.on('stockNew', newStockData => {
   if (newStockData === 'exists' || newStockData === 'invalid') {
     console.log('exists / invalid : ', newStockData);
+    $('.input-field').val('');
+    $('.input-field').attr('placeholder', (newStockData === 'exists') ? 'Enter new symbol' : 'Enter valid symbol');
   }
 });
 
@@ -57,7 +56,8 @@ socket.on('stockAll', allStockData => {
 
 const drawChart = (data) => {
 
-  var tempData = data.filter(d => parseDate(d[1]) > parseDate(lastYearDate));
+  // Default to only 1 year data
+  var tempData = data.filter(d => parseDate(d[1]) > parseDate(lastMonthDate));
   data = tempData;
 
   data.forEach(d => {
@@ -66,19 +66,22 @@ const drawChart = (data) => {
     d.closeVal = +d[2];
   });
 
-
   // Scale the range of the data
   // x.domain(d3.extent(data, d => d.closeDate));
-  x.domain([parseDate(lastYearDate), parseDate(todayDate)]);
+  x.domain([parseDate(lastMonthDate), parseDate(todayDate)]);
   y.domain([0, d3.max(data, d => d.closeVal)]);
+  console.log(x.domain(), y.domain());
 
-  // Filter data for year by default
+  // Define the line
+  var priceLine = d3.line()
+    .x(d => x(d.closeDate))
+    .y(d => y(d.closeVal));
+
 
   // Nest the entries by symbol
   const nestedData = d3.nest()
     .key(d => d.ticker)
     .entries(data);
-
 
   // https://www.youtube.com/watch?v=OZXYk_bgQGQ
 
@@ -95,20 +98,6 @@ const drawChart = (data) => {
   var path = chart.selectAll('path')
     .data(nestedData, d => d.key);
 
-  // Delete removed tickers
-  path
-    .exit()
-    .transition()
-    .duration(transitionDuration)
-    .remove();
-
-  // Update value of path of existing data since scale will change when adding new tickers
-  path
-    .transition()
-    .duration(transitionDuration)
-    .ease(d3.easeQuadOut)
-    .attr('d', d => priceLine(d.values));
-
   // Append path for newly added ticker
   path.enter()
     .append('path')
@@ -120,6 +109,30 @@ const drawChart = (data) => {
     .attr('stroke-dashoffset', function (d) { return this.getTotalLength() })
     .transition().duration(transitionDuration).ease(d3.easeQuadOut).attr('stroke-dashoffset', 0);
 
+  drawTiles(path.enter().data().map(d => d.key));
+
+  // Update value of path of existing data since scale will change when adding new tickers
+  path
+    // .transition()
+    // .duration(transitionDuration)
+    // .ease(d3.easeQuadOut)
+    .attr('d', d => {
+      console.log(d);
+      return priceLine(d.values)
+    });
+
+  // Delete removed tickers
+  path
+    .exit()
+    .transition()
+    .duration(transitionDuration)
+    .ease(d3.easeQuadOut)
+    .style('opacity', 0)
+    .remove();
+
+  removeTiles(path.exit().data().map(d => d.key));
+
+
   var xAxis = d3.axisBottom(x);
 
   var yAxis = d3.axisRight(y)
@@ -129,7 +142,7 @@ const drawChart = (data) => {
 
     var xGroup = chart.append('g')
       .attr('class', 'x axis')
-      .attr('transform', `translate(0,${height})`)
+      .attr('transform', `translate(0, ${height}) `)
       .call(customXAxis);
 
     var yGroup = chart.append('g')
@@ -137,23 +150,22 @@ const drawChart = (data) => {
       .call(customYAxis);
 
   } else {
-
     d3.selectAll('.y.axis')
       .transition()
       .duration(transitionDuration)
       .call(customYAxis);
-
   }
-
 
   function customXAxis(g) {
     g.call(xAxis);
     g.select('.domain').remove();
   }
 
+
+  // MOUSE HOVER TOOLTIP (LATER) from (https://stackoverflow.com/questions/34886070/multiseries-line-chart-with-mouseover-tooltip)
+
   // NEEDS CLARIFICATION?
   function customYAxis(g) {
-    console.log(g.selection);
     var s = g.selection ? g.selection() : g;
     g.call(yAxis);
     s.select('.domain').remove();
@@ -166,7 +178,31 @@ const drawChart = (data) => {
 
 }
 
+function drawTiles(tickers) {
+  tickers.forEach(ticker => {
+    $(`<div class='ticker-card ${ticker}' data-tilt> <div>${ticker}</div></div > `)
+      .appendTo('.ticker-div')
+      .css({ 'opacity': 0 })
+      .animate({ 'opacity': 1 }, 2000)
+      .on('click', function () {
+        socket.emit('stockDel', ticker);
+      })
+      .tilt();
+  });
+}
 
-/////////////////////////////////////////////////////////
+function removeTiles(tickers) {
+  tickers.forEach(ticker => {
+    $(`.ticker-card.${ticker}`).remove();
+  });
+}
 
+$('body').on('mouseenter', '.ticker-card', function () {
+  $(`.line.${$(this).attr('class').split(' ')[1]
+    }`).css('stroke-width', 4);
+});
 
+$('body').on('mouseleave', '.ticker-card', function () {
+  $(`.line.${$(this).attr('class').split(' ')[1]
+    }`).css('stroke-width', 2);
+});

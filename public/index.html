@@ -6,21 +6,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
   <link rel='stylesheet' type='text/css' href='./style.css' />
+  <link href="https://fonts.googleapis.com/css?family=Roboto:300,400" rel="stylesheet">
   <title>Chart the stock market</title>
 </head>
 
 <body>
-  <input id='input' type='text'></input><button id='submit'>Submit</button>
-
   <div class='graph'>
     <svg class='chart'>
     </svg>
   </div>
 
+  <div class='ticker-div'>
+    <div class='ticker-card input' data-tilt>
+      <form action='#'>
+        <input type='text' class='input-field' placeholder="Enter Symbol" maxlength="8"></input>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.2.1.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4="
+    crossorigin="anonymous"></script>
   <script src='https://momentjs.com/downloads/moment.min.js'></script>
   <script src="https://d3js.org/d3.v4.min.js"></script>
   <script src='/socket.io/socket.io.js'></script>
   <script src='./script.js'></script>
+  <script src='https://unpkg.com/tilt.js@1.1.21/dest/tilt.jquery.min.js'></script>
 </body>
 
 </html>
